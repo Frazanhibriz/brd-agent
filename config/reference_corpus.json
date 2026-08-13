@@ -1,0 +1,101 @@
+{
+  "schema_version": 2,
+  "corpus_name": "approved_reference_brd_corpus",
+  "document_count": 15,
+  "approval_status": "approved",
+  "source_directory": "data/reference_brds",
+  "file_resolution_rule": "Resolve each source file by its numeric sequence prefix '<sequence> -'. Exact filename wording is not used as identity.",
+  "purpose": "Offline/admin-loaded approved BRD reference corpus for field-aligned lexical matching.",
+  "documents": [
+    {
+      "sequence": 1,
+      "document_id": "brd_guest_checkout_payment_flow_v1",
+      "title": "Guest Checkout Payment Flow",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 2,
+      "document_id": "brd_inventory_management_v1",
+      "title": "Inventory Management",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 3,
+      "document_id": "brd_customer_loyalty_program_v1",
+      "title": "Customer Loyalty Program",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 4,
+      "document_id": "brd_loan_application_approval_v1",
+      "title": "Loan Application Approval",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 5,
+      "document_id": "brd_fraud_detection_alerts_v1",
+      "title": "Fraud Detection Alerts",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 6,
+      "document_id": "brd_kyc_verification",
+      "title": "KYC Verification",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 7,
+      "document_id": "brd_patient_appointment_scheduling",
+      "title": "Patient Appointment Scheduling",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 8,
+      "document_id": "brd_insurance_claims_processing",
+      "title": "Insurance Claims Processing",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 9,
+      "document_id": "brd_employee_onboarding_portal",
+      "title": "Employee Onboarding Portal",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 10,
+      "document_id": "brd_leave_management_system",
+      "title": "Leave Management System",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 11,
+      "document_id": "brd_payroll_processing",
+      "title": "Payroll Processing",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 12,
+      "document_id": "brd_warehouse_management",
+      "title": "Warehouse Management",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 13,
+      "document_id": "brd_recruitment_ats",
+      "title": "Recruitment ATS",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 14,
+      "document_id": "brd_lms_learning_management_system",
+      "title": "LMS (Learning Management System)",
+      "approval_status": "approved"
+    },
+    {
+      "sequence": 15,
+      "document_id": "brd_subscription_billing_saas",
+      "title": "Subscription Billing (SaaS)",
+      "approval_status": "approved"
+    }
+  ]
+}

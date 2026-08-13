@@ -1,0 +1,122 @@
+[
+  {
+    "id": "eval_01",
+    "query": "allow guests to purchase without registering an account",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_guest_checkout_payment_flow_v1"]
+  },
+  {
+    "id": "eval_02",
+    "query": "track low stock levels and alert store manager",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_inventory_management_v1"]
+  },
+  {
+    "id": "eval_03",
+    "query": "points balance tier levels and reward points redemption",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_customer_loyalty_program_v1"]
+  },
+  {
+    "id": "eval_04",
+    "query": "credit score evaluation and automated loan decision",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_loan_application_approval_v1"]
+  },
+  {
+    "id": "eval_05",
+    "query": "flag transactions with unusual location or high velocity",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_fraud_detection_alerts_v1"]
+  },
+  {
+    "id": "eval_06",
+    "query": "scan identity card or passport for identity verification",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_kyc_verification"]
+  },
+  {
+    "id": "eval_07",
+    "query": "patient needs to reschedule appointment online",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_patient_appointment_scheduling"]
+  },
+  {
+    "id": "eval_08",
+    "query": "claim approval workflow and medical document attachment",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_insurance_claims_processing"]
+  },
+  {
+    "id": "eval_09",
+    "query": "employee onboarding checklist and tax document uploads",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_employee_onboarding_portal"]
+  },
+  {
+    "id": "eval_10",
+    "query": "employee self service leave submission and manager approval",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_leave_management_system"]
+  },
+  {
+    "id": "eval_11",
+    "query": "calculate monthly salary with tax and insurance deductions",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_payroll_processing"]
+  },
+  {
+    "id": "eval_12",
+    "query": "warehouse stock picking list optimization and barcode scanning",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_warehouse_management"]
+  },
+  {
+    "id": "eval_13",
+    "query": "right now interview feedback is usually verbal and gets lost",
+    "field_id": "1.1.1",
+    "expected_document_keys": ["brd_recruitment_ats"]
+  },
+  {
+    "id": "eval_14",
+    "query": "track course completion rate and issue completion certificate",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_lms_learning_management_system"]
+  },
+  {
+    "id": "eval_15",
+    "query": "customers should be able to change subscription plans themselves",
+    "field_id": "1.2",
+    "expected_document_keys": ["brd_subscription_billing_saas"]
+  },
+  {
+    "id": "eval_16",
+    "query": "refund processing and payment gateway error handling",
+    "field_id": "3.4",
+    "expected_document_keys": ["brd_guest_checkout_payment_flow_v1"]
+  },
+  {
+    "id": "eval_17",
+    "query": "recurring billing retry logic for failed credit card payments",
+    "field_id": "3.7",
+    "expected_document_keys": ["brd_subscription_billing_saas"]
+  },
+  {
+    "id": "eval_18",
+    "query": "candidate resume parsing and interview scheduling ATS",
+    "field_id": "3.1",
+    "expected_document_keys": ["brd_recruitment_ats"]
+  },
+  {
+    "id": "eval_19",
+    "query": "shift allowance calculation and overtime pay rules",
+    "field_id": "2.2",
+    "expected_document_keys": ["brd_payroll_processing"]
+  },
+  {
+    "id": "eval_20",
+    "query": "patient identity verification prior to appointment booking",
+    "field_id": "3.1",
+    "expected_document_keys": ["brd_patient_appointment_scheduling"]
+  }
+]
