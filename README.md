@@ -13,16 +13,6 @@ It processes approved Business Requirement Documents (BRDs), maps content to **2
 
 ---
 
-## Project Status
-
-| Component | Status | Description |
-|---|---|---|
-| **Task 1** — Canonical Field Contract & Corpus Scope | ✅ Complete | 26 answerable leaf fields, 2 structural sections, 15 seed BRDs. |
-| **Task 2** — DOCX Ingestion & PostgreSQL Persistence | ✅ Complete | Sequential loader, regex & fuzzy heading matcher, field chunker, psycopg v3 repo. |
-| **Task 4** — Semantic Retrieval & Vector Search | ✅ Complete | `pgvector` HNSW cosine similarity search, `fastembed` 384-dim vectors, lexical baseline. |
-
----
-
 ## Repository Structure
 
 ```text
