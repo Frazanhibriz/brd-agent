@@ -1,10 +1,15 @@
 # BRD Chatbot — Reference Ingestion & Grounded AI Retrieval System
 
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-blue)
+![pgvector](https://img.shields.io/badge/pgvector-0.5.0%2B-green)
+![Tests](https://img.shields.io/badge/tests-15%20passed-brightgreen)
+
 ## Overview
 
-This repository contains the **reference document ingestion pipeline**, **pgvector semantic retrieval engine**, and **grounded LLM chat service** for the BRD Agent project.
+This repository contains the **reference document ingestion pipeline**, **pgvector semantic retrieval engine**, and **grounded AI retrieval service** for the BRD Agent project.
 
-It processes approved Business Requirement Documents (BRDs), stores field-aligned content chunks with 384-dimensional vector embeddings in PostgreSQL using `pgvector`, and provides grounded prompt context construction for LLM response generation.
+It processes approved Business Requirement Documents (BRDs), maps content to **26 canonical leaf fields**, stores field-aligned chunks with **384-dimensional vector embeddings** (FastEmbed `BAAI/bge-small-en-v1.5`) in PostgreSQL using `pgvector`, and provides grounded retrieval context.
 
 ---
 
@@ -12,9 +17,9 @@ It processes approved Business Requirement Documents (BRDs), stores field-aligne
 
 | Component | Status | Description |
 |---|---|---|
-| **Task 1** — Canonical Field Contract & Corpus Scope | ✅ Complete | 26 answerable leaf fields, 2 structural sections, dependency matrix, 15 seed BRDs. |
-| **Task 2** — DOCX Ingestion & PostgreSQL Persistence | ✅ Complete | Element-order loader, 4-path heading parser, field chunker, idempotent repository. |
-| **Task 4** — Semantic Retrieval & Grounded LLM Chat | ✅ Complete | `pgvector` HNSW cosine similarity search, `fastembed` 384-dim vectors, `GroundedLLMService`. |
+| **Task 1** — Canonical Field Contract & Corpus Scope | ✅ Complete | 26 answerable leaf fields, 2 structural sections, 15 seed BRDs. |
+| **Task 2** — DOCX Ingestion & PostgreSQL Persistence | ✅ Complete | Sequential loader, regex & fuzzy heading matcher, field chunker, psycopg v3 repo. |
+| **Task 4** — Semantic Retrieval & Vector Search | ✅ Complete | `pgvector` HNSW cosine similarity search, `fastembed` 384-dim vectors, lexical baseline. |
 
 ---
 
@@ -24,39 +29,34 @@ It processes approved Business Requirement Documents (BRDs), stores field-aligne
 brd_chatbot/
 ├── config/
 │   ├── brd_fields.json          # Single source of truth for 26 canonical leaf fields
-│   └── reference_corpus.json    # Seed BRD registrations
+│   └── reference_corpus.json    # Seed BRD registrations (15 reference documents)
 ├── data/
-│   └── reference_brds/          # 15 approved BRD DOCX files (placed here)
-├── docs/
-│   ├── ingest_design.md         # Ingestion architecture documentation
-│   └── semantic_retrieval.md    # Vector retrieval & LLM chat specification
-├── ingest/                      # TASK 1 & 2 INGESTION PIPELINE
-│   ├── loader.py       # DOCX loading (paragraphs + tables in document order)
-│   ├── parser.py       # Canonical field resolution (26-field contract)
-│   ├── chunker.py      # Field content -> ReferenceChunk objects (<=3500 chars)
-│   ├── validator.py    # Chunk validation rules
-│   ├── repository.py   # PostgreSQL persistence (psycopg v3)
-│   └── cli.py          # Ingestion CLI entry point
-├── retrieval/                   # TASK 4 VECTOR RETRIEVAL LAYER
+│   └── reference_brds/          # 15 approved BRD DOCX files
+├── ingest/                      # INGESTION & PARSING PIPELINE
+│   ├── loader.py       # Membaca paragraf + tabel .docx sesuai urutan dokumen
+│   ├── parser.py       # Pencocokan judul ke 26 canonical fields (Regex + Fuzzy)
+│   ├── chunker.py      # Field content -> ReferenceChunk (target 1200-2000 chars)
+│   ├── validator.py    # Chunk & field quality validation rules
+│   └── repository.py   # PostgreSQL persistence (psycopg v3)
+├── retrieval/                   # VECTOR RETRIEVAL LAYER
 │   ├── embeddings.py   # FastEmbed generator (384-dim BAAI/bge-small-en-v1.5)
-│   ├── store.py        # PostgresSemanticStore (pgvector cosine similarity search)
-│   ├── models.py       # SearchResult model
-│   └── cli.py          # Vector retrieval CLI tool
-├── ai/                          # GROUNDED LLM CHAT SERVICE
-│   └── client.py       # GroundedLLMService & prompt context builder
+│   ├── semantic.py     # PostgresSemanticStore (pgvector cosine similarity search)
+│   ├── lexical_baseline.py # Lexical/BM25 baseline for comparison
+│   └── models.py       # Unified Dataclass Models (LoadedDocument, ReferenceChunk, SearchResult)
 ├── migrations/
 │   ├── 001_create_reference_corpus.sql    # Core document and chunk tables
 │   └── 002_add_pgvector.sql               # pgvector extension, vector column, HNSW index
 ├── scripts/
-│   ├── validate_task1_config.py           # Task 1 structural validator
-│   ├── embed_reference_chunks.py        # Offline vector embedding generator script
-│   └── create_synthetic_fixture.py        # Test fixture generator
-├── tests/                       # AUTOMATED TEST SUITE (54 PASSING TESTS)
-│   ├── test_parser.py                     # Parser unit tests
-│   ├── test_chunker.py                    # Chunker unit tests
-│   ├── test_synthetic_future_brd.py       # Future BRD integration test
-│   └── test_semantic_retrieval.py         # Semantic retrieval & LLM integration tests
+│   ├── ingest_references.py               # Single-command operator ingestion CLI
+│   └── evaluate_retrieval.py              # Retrieval accuracy evaluation benchmark
+├── tests/                       # AUTOMATED TEST SUITE (15 PASSING TESTS)
+│   ├── test_ingest.py                     # Parser, chunker, & repo unit tests
+│   ├── test_lexical_baseline.py           # Lexical search tests
+│   ├── test_relevance.py                  # Retrieval relevance tests
+│   ├── test_retrieval.py                  # Retrieval function contract tests
+│   └── test_synthetic_future_brd.py       # Integration test for future BRD (Seq 16)
 ├── .env.example
+├── .gitignore
 ├── requirements.txt
 └── README.md
 ```
@@ -65,7 +65,7 @@ brd_chatbot/
 
 ## Quick Start
 
-### 1. Install dependencies
+### 1. Install Dependencies
 
 ```bash
 python3 -m venv .venv
@@ -84,34 +84,24 @@ cp .env.example .env
 Apply database migrations:
 
 ```bash
-psql -d brd_chatbot -f migrations/001_create_reference_corpus.sql
-psql -d brd_chatbot -f migrations/002_add_pgvector.sql
+psql -h localhost -U postgres -d brd_chatbot -f migrations/001_create_reference_corpus.sql
+psql -h localhost -U postgres -d brd_chatbot -f migrations/002_add_pgvector.sql
 ```
 
 ### 3. Ingest BRDs and Generate Vector Embeddings
 
 ```bash
-# 1. Ingest approved BRD documents
-python3 -m ingest.cli --all
+# Dry-run validation (without DB writes):
+python3 scripts/ingest_references.py --all --dry-run
 
-# 2. Generate and store 384-dim vector embeddings in PostgreSQL
-python3 scripts/embed_reference_chunks.py
+# Production ingestion (loads, chunks, embeds 384-dim vectors, & saves to PostgreSQL):
+python3 scripts/ingest_references.py --all
 ```
 
-### 4. Query Semantic Retrieval & Grounded LLM Chat
+### 4. Run Automated Tests
 
 ```bash
-# Semantic vector search
-python3 -m retrieval.cli --query "leave management business objective" --field-id 1.2
-
-# Grounded LLM Chat Response
-python3 -m retrieval.cli --query "leave management business objective" --field-id 1.2 --llm
-```
-
-### 5. Run Automated Tests
-
-```bash
-python3 -m pytest tests/ -v
+pytest tests/ -v
 ```
 
 ---
@@ -120,6 +110,11 @@ python3 -m pytest tests/ -v
 
 ```
 DOCX File ➔ [loader.py] ➔ [parser.py] ➔ [chunker.py] ➔ [repository.py] ➔ PostgreSQL
+                                                                                │
+                                                                                ▼
+User Query ➔ [EmbeddingGenerator] ➔ [PostgresSemanticStore] ➔ Top-K Grounded Chunks
+```
+➔ PostgreSQL
                                                                                │
                                                                                ▼
 User Query ➔ [EmbeddingGenerator] ➔ [PostgresSemanticStore] ➔ Top-K Chunks ➔ [GroundedLLMService] ➔ Grounded Answer
