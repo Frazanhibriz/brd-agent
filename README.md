@@ -33,12 +33,19 @@ brd_chatbot/
 │   ├── semantic.py     # PostgresSemanticStore (pgvector cosine similarity search)
 │   ├── lexical_baseline.py # Lexical/BM25 baseline for comparison
 │   └── models.py       # Unified Dataclass Models (LoadedDocument, ReferenceChunk, SearchResult)
+├── generation/                  # LLM GENERATION & ORCHESTRATION LAYER
+│   ├── generator.py    # Core generation engine & field-scoped context injection
+│   ├── llm_client.py   # LLM interface wrappers (FakeLLMClient, etc.)
+│   ├── models.py       # Dataclass models (GeneratedSection, GeneratedDocument)
+│   ├── prompts.py      # System instructions & dynamic prompt builders
+│   └── renderer.py     # Markdown rendering for generated sections
 ├── migrations/
 │   ├── 001_create_reference_corpus.sql    # Core document and chunk tables
 │   └── 002_add_pgvector.sql               # pgvector extension, vector column, HNSW index
 ├── scripts/
 │   ├── ingest_references.py               # Single-command operator ingestion CLI
-│   └── evaluate_retrieval.py              # Retrieval accuracy evaluation benchmark
+│   ├── evaluate_retrieval.py              # Retrieval accuracy evaluation benchmark
+│   └── demo_generation.py                 # Standalone generation subsystem demo
 ├── tests/                       # AUTOMATED TEST SUITE (15 PASSING TESTS)
 │   ├── test_ingest.py                     # Parser, chunker, & repo unit tests
 │   ├── test_lexical_baseline.py           # Lexical search tests
@@ -94,18 +101,21 @@ python3 scripts/ingest_references.py --all
 pytest tests/ -v
 ```
 
+### 5. Run Generation Demo
+
+To see the AI generation subsystem in action with mock LLM responses:
+
+```bash
+python3 scripts/demo_generation.py
+```
+
 ---
 
 ## Architecture Flow
 
-```
+```text
 DOCX File ➔ [loader.py] ➔ [parser.py] ➔ [chunker.py] ➔ [repository.py] ➔ PostgreSQL
                                                                                 │
                                                                                 ▼
-User Query ➔ [EmbeddingGenerator] ➔ [PostgresSemanticStore] ➔ Top-K Grounded Chunks
-```
-➔ PostgreSQL
-                                                                               │
-                                                                               ▼
-User Query ➔ [EmbeddingGenerator] ➔ [PostgresSemanticStore] ➔ Top-K Chunks ➔ [GroundedLLMService] ➔ Grounded Answer
+User Query ➔ [EmbeddingGenerator] ➔ [PostgresSemanticStore] ➔ Top-K Chunks ➔ [generator.py] ➔ Grounded Section
 ```
