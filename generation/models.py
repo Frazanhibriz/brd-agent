@@ -15,7 +15,7 @@ class ReferenceCitation:
     """
     Provenance tracking for a reference chunk provided to or cited by the LLM.
     """
-    citation_id: str  # Deterministic local identifier, e.g. "R1", "R2"
+    citation_id: str  
     document_key: str
     document_title: str
     field_id: str

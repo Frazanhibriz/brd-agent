@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import os
 from typing import Callable, Protocol, Sequence, Any
+import dotenv
+
+dotenv.load_dotenv()
 
 
 class LLMClient(Protocol):
@@ -50,11 +53,18 @@ class FakeLLMClient:
         if self.canned_response is not None:
             return self.canned_response
 
-        # Default fallback response echoing confirmed information and standard citation
-        return (
-            "The system shall support the specified project requirements. "
-            "Grounded by reference standards [R1]."
-        )
+        # Default fallback structured JSON response citing C1 and grounding R1
+        import json
+        return json.dumps({
+            "requirements": [
+                {
+                    "text": "The system shall support the specified project requirements.",
+                    "evidence_ids": ["C1"],
+                    "grounding_reference_ids": ["R1"]
+                }
+            ],
+            "unresolved_gap_ids": []
+        })
 
 
 class GeminiLLMClient:
@@ -62,7 +72,7 @@ class GeminiLLMClient:
     Real LLM client provider using Google Generative AI (Gemini API).
     """
 
-    def __init__(self, api_key: str | None = None, model_name: str = "gemini-1.5-flash") -> None:
+    def __init__(self, api_key: str | None = None, model_name: str = "gemini-2.5-flash") -> None:
         key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key:
             raise ValueError(
@@ -85,9 +95,11 @@ class GeminiLLMClient:
         model = genai.GenerativeModel(
             model_name=self.model_name,
             system_instruction=system_instruction,
+            generation_config={"response_mime_type": "application/json"},
         )
         response = model.generate_content(prompt)
         return response.text or ""
+
 
 
 def get_default_llm_client(fallback_fake: bool = True) -> LLMClient:

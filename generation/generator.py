@@ -13,16 +13,18 @@ import json
 import re
 from pathlib import Path
 from typing import Callable, Sequence
-
 from retrieval.models import SearchResult
 from retrieval.semantic import search_references
-
 from .llm_client import LLMClient, get_default_llm_client
 from .models import GeneratedDocument, GeneratedSection, ReferenceCitation
-from .prompts import build_section_generation_prompt
+from .prompts import build_section_generation_prompt, extract_confirmed_evidence, extract_canonical_gaps
 
 ROOT = Path(__file__).resolve().parents[1]
 BRD_FIELDS_PATH = ROOT / "config" / "brd_fields.json"
+
+class UnsafeGenerationError(ValueError):
+    """Raised when generated LLM output violates strict reference-isolation or evidence contracts."""
+    pass
 
 
 def _load_canonical_schema() -> tuple[dict[str, dict[str, str]], list[str], set[str]]:
@@ -58,6 +60,70 @@ CANONICAL_FIELDS_META, CANONICAL_FIELD_ORDER, STRUCTURAL_SECTION_IDS = _load_can
 CANONICAL_ANSWERABLE_FIELDS = set(CANONICAL_FIELDS_META.keys())
 
 
+WORD_NUMBERS = {
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+    "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy",
+    "eighty", "ninety", "hundred", "thousand", "million"
+}
+
+
+def _extract_numeric_tokens(text: str) -> list[str]:
+    clean = re.sub(r"\[[RC]\d+\]", "", text)
+    clean = re.sub(r"^\s*(?:\d+(?:\.\d+)*[.)]?\s*)+", "", clean)
+    tokens = re.findall(r"(?:[\$€£¥Rp]\s*)?\b\d+(?:[.,]\d+)?\b%?", clean)
+    return [t.strip() for t in tokens if t.strip()]
+
+
+def _validate_requirement_facts(req_text: str, cited_evidence_text: str) -> None:
+    req_numeric = _extract_numeric_tokens(req_text)
+    if req_numeric:
+        evidence_numeric = set(_extract_numeric_tokens(cited_evidence_text))
+        evidence_digits = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", cited_evidence_text))
+
+        for token in req_numeric:
+            clean_digit = re.sub(r"[^\d.]", "", token)
+            if token in evidence_numeric or clean_digit in evidence_digits:
+                continue
+            raise UnsafeGenerationError(
+                f"Generated requirement introduces unconfirmed numeric/metric fact '{token}' "
+                f"not present in cited confirmed evidence: '{cited_evidence_text}'."
+            )
+
+    clean_req = re.sub(r"\[[RC]\d+\]", "", req_text)
+    clean_req = re.sub(r"^\s*(?:\d+(?:\.\d+)*[.)]?\s*)+", "", clean_req)
+    for word in WORD_NUMBERS:
+        if re.search(rf"\b{word}\b", clean_req, re.IGNORECASE):
+            if not re.search(rf"\b{word}\b", cited_evidence_text, re.IGNORECASE):
+                digit_map = {
+                    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+                    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+                    "ten": "10", "twenty": "20", "thirty": "30", "ninety": "90", "hundred": "100"
+                }
+                digit_eq = digit_map.get(word.lower())
+                if digit_eq and re.search(rf"\b{digit_eq}\b", cited_evidence_text):
+                    continue
+                raise UnsafeGenerationError(
+                    f"Generated requirement introduces unconfirmed numeric/metric fact '{word}' "
+                    f"not present in cited confirmed evidence: '{cited_evidence_text}'."
+                )
+
+
+def _parse_structured_llm_json(raw_output: str) -> dict:
+    text = raw_output.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise UnsafeGenerationError(f"LLM output could not be parsed as valid JSON: {exc}\nRaw output: {raw_output[:200]}") from exc
+
+    if not isinstance(data, dict):
+        raise UnsafeGenerationError("LLM JSON output must be a JSON object (dict).")
+    return data
+
+
 def generate_section(
     field_id: str,
     confirmed_information: str,
@@ -74,7 +140,8 @@ def generate_section(
     - field_id=None or structural/invalid field_id raises ValueError.
     - empty/whitespace confirmed_information returns an unresolved section without LLM fabrication.
     - search_references is invoked with field_id=field_id for field-scoped grounding.
-    - citations in LLM output are validated against retrieved citation IDs.
+    - LLM output must be structured JSON citing valid C* evidence IDs and optional R* grounding IDs.
+    - Code-level validation rejects any unconfirmed numeric/time/percentage/currency values.
     """
     if field_id is None:
         raise ValueError("field_id is required for section generation. field_id=None is not permitted.")
@@ -102,6 +169,9 @@ def generate_section(
             is_unresolved=True,
         )
 
+    confirmed_evidence_map = extract_confirmed_evidence(confirmed_information)
+    canonical_gaps = extract_canonical_gaps(meta["information_needed"])
+
     # Retrieval formulation
     query_text = confirmed_information.strip()
     if conversation_context and conversation_context.strip():
@@ -127,37 +197,152 @@ def generate_section(
         field_title=field_title,
         big_question=meta["big_question"],
         information_needed=meta["information_needed"],
-        confirmed_information=confirmed_information,
+        confirmed_information=confirmed_evidence_map,
         conversation_context=conversation_context,
         references=retrieved_tuple,
+        canonical_gaps=canonical_gaps,
     )
 
     # Invoke LLM
     client = llm_client or get_default_llm_client()
     raw_output = client.generate(prompt=user_prompt, system_instruction=system_instruction)
 
-    # Extract and validate citation markers (e.g. [R1], [R2])
-    found_citations = re.findall(r"\[(R\d+)\]", raw_output)
+    # Parse and validate structured JSON
+    data = _parse_structured_llm_json(raw_output)
 
-    cited_refs: list[ReferenceCitation] = []
-    seen_cids = set()
-    for cid in found_citations:
-        if cid not in valid_citation_map:
-            raise ValueError(
-                f"Model generated invalid citation: [{cid}]. Valid citations are: {sorted(list(valid_citation_map.keys()))}"
+    if "requirements" not in data or not isinstance(data["requirements"], list):
+        raise UnsafeGenerationError("Structured JSON output must contain a 'requirements' list.")
+
+    # Disallow legacy free-form unresolved_items
+    if "unresolved_items" in data and data["unresolved_items"]:
+        raise UnsafeGenerationError(
+            "Free-form 'unresolved_items' is not permitted. You must select canonical gap IDs using 'unresolved_gap_ids'."
+        )
+
+    unresolved_gap_ids = data.get("unresolved_gap_ids", [])
+    if not isinstance(unresolved_gap_ids, list):
+        raise UnsafeGenerationError("'unresolved_gap_ids' must be a list of canonical G* gap IDs.")
+
+    # Validate gap IDs against canonical_gaps
+    validated_gap_ids: list[str] = []
+    for gid in unresolved_gap_ids:
+        if not isinstance(gid, str):
+            raise UnsafeGenerationError(f"Gap ID '{gid}' must be a string.")
+        if gid.startswith("R"):
+            raise UnsafeGenerationError(
+                f"Invalid gap ID '{gid}'. R* identifiers are non-authoritative reference citations and cannot be used as gap IDs."
             )
-        if cid not in seen_cids:
-            seen_cids.add(cid)
-            cited_refs.append(valid_citation_map[cid])
+        if gid.startswith("C"):
+            raise UnsafeGenerationError(
+                f"Invalid gap ID '{gid}'. C* identifiers are confirmed evidence and cannot be used as gap IDs."
+            )
+        if not gid.startswith("G") or gid not in canonical_gaps:
+            raise UnsafeGenerationError(
+                f"Unresolved gap ID '{gid}' is invalid for field {field_id}. Valid canonical G* gap IDs: {sorted(list(canonical_gaps.keys()))}"
+            )
+        if gid not in validated_gap_ids:
+            validated_gap_ids.append(gid)
+
+    req_list = data["requirements"]
+    validated_reqs: list[dict] = []
+    cited_r_ids: set[str] = set()
+
+    for idx, req in enumerate(req_list):
+        if not isinstance(req, dict):
+            raise UnsafeGenerationError(f"Requirement at index {idx} must be a JSON object.")
+
+        req_text = req.get("text", "").strip()
+        if not req_text:
+            continue
+
+        evidence_ids = req.get("evidence_ids")
+        if not evidence_ids or not isinstance(evidence_ids, list) or len(evidence_ids) == 0:
+            raise UnsafeGenerationError(
+                f"Requirement '{req_text[:40]}' is missing required 'evidence_ids' list."
+            )
+
+        cited_evidence_parts: list[str] = []
+        for eid in evidence_ids:
+            if not isinstance(eid, str):
+                raise UnsafeGenerationError(f"Evidence ID '{eid}' must be a string.")
+            if eid.startswith("R"):
+                raise UnsafeGenerationError(
+                    f"Requirement '{req_text[:40]}' uses R* identifier '{eid}' as factual evidence. "
+                    "R* identifiers can only be used as grounding_reference_ids, never as evidence_ids."
+                )
+            if eid not in confirmed_evidence_map:
+                raise UnsafeGenerationError(
+                    f"Requirement '{req_text[:40]}' cites non-existent confirmed evidence ID '{eid}'. "
+                    f"Valid C* evidence IDs: {sorted(list(confirmed_evidence_map.keys()))}"
+                )
+            cited_evidence_parts.append(confirmed_evidence_map[eid])
+
+        combined_evidence_text = "\n".join(cited_evidence_parts)
+
+        # Validate grounding reference IDs
+        grounding_refs = req.get("grounding_reference_ids", [])
+        if not isinstance(grounding_refs, list):
+            raise UnsafeGenerationError(f"grounding_reference_ids must be a list for requirement '{req_text[:40]}'.")
+
+        for rid in grounding_refs:
+            if not isinstance(rid, str) or not rid.startswith("R") or rid not in valid_citation_map:
+                raise UnsafeGenerationError(
+                    f"Requirement cites invalid or non-existent grounding reference ID '{rid}'. "
+                    f"Valid R* IDs: {sorted(list(valid_citation_map.keys()))}"
+                )
+            cited_r_ids.add(rid)
+
+        # Check inline citation markers in text
+        for inline_rid in re.findall(r"\[(R\d+)\]", req_text):
+            if inline_rid not in valid_citation_map:
+                raise UnsafeGenerationError(
+                    f"Requirement text contains invalid reference citation '[{inline_rid}]'. "
+                    f"Valid R* IDs: {sorted(list(valid_citation_map.keys()))}"
+                )
+            cited_r_ids.add(inline_rid)
+
+        # Validate numeric/temporal/currency facts
+        _validate_requirement_facts(req_text, combined_evidence_text)
+
+        validated_reqs.append({
+            "text": req_text,
+            "evidence_ids": evidence_ids,
+            "grounding_reference_ids": grounding_refs,
+        })
+
+    # Construct final content
+    content_lines: list[str] = []
+    if validated_reqs:
+        for r in validated_reqs:
+            t = r["text"]
+            g_refs = r["grounding_reference_ids"]
+            if g_refs:
+                tags_to_add = [f"[{gid}]" for gid in g_refs if f"[{gid}]" not in t]
+                if tags_to_add:
+                    t = f"{t} {' '.join(tags_to_add)}"
+            content_lines.append(f"- {t}" if len(validated_reqs) > 1 else t)
+    else:
+        content_lines.append("[No confirmed requirements generated for this section]")
+
+    if validated_gap_ids:
+        content_lines.append("")
+        content_lines.append("**Pending Confirmation / Unresolved:**")
+        for gid in validated_gap_ids:
+            content_lines.append(f"- {canonical_gaps[gid]}")
+
+    final_content = "\n".join(content_lines)
+    cited_refs_tuple = tuple(valid_citation_map[rid] for rid in sorted(cited_r_ids))
 
     return GeneratedSection(
         field_id=field_id,
         field_title=field_title,
-        content=raw_output.strip(),
+        content=final_content.strip(),
         retrieved_references=retrieved_tuple,
-        cited_references=tuple(cited_refs),
+        cited_references=cited_refs_tuple,
         is_unresolved=False,
     )
+
+
 
 
 def generate_final_document(
